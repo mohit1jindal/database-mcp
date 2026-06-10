@@ -9,6 +9,20 @@ Everything runs on your machine over stdio and query results never leave your
 environment. The server is **read-only by design** and ships with no write
 capability, making it safe to point at databases holding sensitive data.
 
+## Demo
+
+<!--
+  Replace the placeholder below with a real recording.
+  Suggested clip (~10–20s): ask "list tables matching INVOICE" → "describe the
+  ORDERS table" → "write a read-only query for the top 10 customers" and show
+  the assistant exploring the schema and returning results.
+  Save it as docs/demo.gif (or .mp4) and the image below will render.
+-->
+
+![oracle-mcp demo](docs/demo.gif)
+
+> _Demo recording coming soon._
+
 ## Tools
 
 | Tool | What it does |
