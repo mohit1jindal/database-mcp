@@ -96,6 +96,11 @@ INVOICE in schema X"*.
 uv run python -c "from oracle_mcp.safety import ensure_read_only; ensure_read_only('SELECT 1 FROM dual'); print('ok')"
 ```
 
+## Documentation
+
+- [docs/CONFIGURATION.md](docs/CONFIGURATION.md) — end-to-end setup: prerequisites, install, env vars, Claude Code registration, multiple databases, TLS/wallet, verification, and troubleshooting.
+- [docs/USE_CASES.md](docs/USE_CASES.md) — features, full tool reference, workflows (schema discovery, mapping, writing/debugging SQL, source→target migration), example prompts, and the read-only safety model.
+
 ## Project layout
 
 ```
@@ -104,4 +109,7 @@ src/oracle_mcp/
   db.py        thin-mode connection pool + value conversion
   safety.py    read-only SQL enforcement
   server.py    FastMCP tools + entry point
+docs/
+  CONFIGURATION.md
+  USE_CASES.md
 ```
