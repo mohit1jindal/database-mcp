@@ -125,3 +125,7 @@ docs/
   CONFIGURATION.docx
   USE_CASES.docx
 ```
+
+## License
+
+Released under the [MIT License](LICENSE).
