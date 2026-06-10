@@ -1,13 +1,20 @@
 """Read-only SQL enforcement.
 
 The server must never modify data. We enforce this defensively at the tool
-layer (in addition to recommending a read-only DB account): only single
-SELECT / WITH...SELECT statements are allowed, and any token that could
-mutate state, lock rows, or run PL/SQL is rejected.
+layer (in addition to recommending a read-only DB account):
 
-This is a conservative allowlist-first check. It strips comments and string
-literals before inspecting tokens so forbidden keywords cannot be smuggled in
-via a comment or a quoted string boundary.
+  * The statement must START with SELECT, WITH, or EXPLAIN. This alone blocks
+    every standalone DDL/DML statement (INSERT/UPDATE/CREATE/DROP/GRANT/...).
+  * Only a single statement is allowed (no piggy-backed second statement).
+  * A small set of constructs that can hide a write *inside* a SELECT/WITH
+    statement are rejected: data-modifying CTEs (INSERT/UPDATE/DELETE/MERGE),
+    `SELECT ... INTO` (creates a table on some engines), and `FOR UPDATE`
+    (row locks).
+
+Comments and string literals are stripped before inspection so keywords can't
+be smuggled in via a comment or quoted text. Crucially, we do NOT blanket-ban
+common words like COMMENT, SET, or LOCK that frequently appear as column names
+— the start-keyword + single-statement checks already make those harmless.
 """
 
 from __future__ import annotations
@@ -21,26 +28,30 @@ class ReadOnlyViolation(ValueError):
     """Raised when a statement is not a safe read-only query."""
 
 
-# Tokens that must never appear in a read-only query (matched on word
-# boundaries, case-insensitive, after comments/strings are stripped).
-_FORBIDDEN = {
-    "INSERT", "UPDATE", "DELETE", "MERGE", "UPSERT",
-    "CREATE", "ALTER", "DROP", "TRUNCATE", "RENAME",
-    "GRANT", "REVOKE", "AUDIT", "NOAUDIT",
-    "COMMIT", "ROLLBACK", "SAVEPOINT", "SET",
-    "LOCK", "FLASHBACK", "PURGE", "ANALYZE", "COMMENT",
-    "EXEC", "EXECUTE", "CALL", "BEGIN", "DECLARE",
-    "PROCEDURE", "FUNCTION", "PACKAGE", "TRIGGER",
-    "DBMS_", "UTL_", "OWA_",  # PL/SQL package prefixes
-    "INTO",  # blocks SELECT ... INTO (PL/SQL)
-}
+# Permitted leading keywords. EXPLAIN is read-only plan inspection; even
+# `EXPLAIN ANALYZE` only executes the (read-only) SELECT it wraps, and any
+# write it tried to wrap would be caught by the in-statement scan below.
+_ALLOWED_START = {"SELECT", "WITH", "EXPLAIN"}
 
-# A trailing semicolon is fine; anything more means multiple statements.
+# Tokens that must never appear ANYWHERE in the statement, because they can
+# embed a write inside an otherwise SELECT/WITH-leading statement (e.g. a
+# data-modifying CTE in PostgreSQL: WITH x AS (DELETE ... RETURNING ...) ...).
+# These are real SQL verbs, not common column names, so whole-word matching
+# them is safe. PL/SQL package prefixes are matched as prefixes.
+_FORBIDDEN_WORDS = {
+    "INSERT", "UPDATE", "DELETE", "MERGE", "UPSERT",
+    "CREATE", "ALTER", "DROP", "TRUNCATE",
+    "GRANT", "REVOKE", "CALL",
+    "INTO",  # blocks `SELECT ... INTO new_table` (a write on T-SQL / Postgres)
+}
+_FORBIDDEN_PREFIXES = ("DBMS_", "UTL_", "OWA_")  # Oracle PL/SQL packages
+
 _TRAILING_SEMI = re.compile(r";\s*$")
 _BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
 _LINE_COMMENT = re.compile(r"--[^\n]*")
 _STRING_LITERAL = re.compile(r"'(?:''|[^'])*'")
 _WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_$#]*")
+_FOR_UPDATE = re.compile(r"\bFOR\s+UPDATE\b")
 
 
 def _strip(sql: str) -> str:
@@ -52,7 +63,7 @@ def _strip(sql: str) -> str:
 
 
 def ensure_read_only(sql: str) -> None:
-    """Validate that *sql* is a single read-only SELECT/WITH statement.
+    """Validate that *sql* is a single read-only statement.
 
     Raises ReadOnlyViolation otherwise.
     """
@@ -64,30 +75,28 @@ def ensure_read_only(sql: str) -> None:
     stripped = _TRAILING_SEMI.sub("", stripped).strip()
     if ";" in stripped:
         raise ReadOnlyViolation(
-            "Multiple statements are not allowed; submit a single SELECT query."
+            "Multiple statements are not allowed; submit a single read-only query."
         )
 
-    first = (_WORD.search(stripped) or [None])
+    first = _WORD.search(stripped)
     first_kw = first.group(0).upper() if first else None
-    if first_kw not in {"SELECT", "WITH"}:
+    if first_kw not in _ALLOWED_START:
         raise ReadOnlyViolation(
-            f"Only SELECT / WITH queries are allowed (got '{first_kw or '?'}'). "
+            f"Only SELECT / WITH / EXPLAIN queries are allowed (got '{first_kw or '?'}'). "
             "This server is read-only."
         )
 
     upper = stripped.upper()
-    for token in _FORBIDDEN:
-        if token.endswith("_"):  # package prefix, e.g. DBMS_
-            if re.search(r"\b" + re.escape(token), upper):
-                raise ReadOnlyViolation(
-                    f"Disallowed PL/SQL package reference '{token}*' in query."
-                )
-            continue
+    for token in _FORBIDDEN_WORDS:
         if re.search(r"\b" + re.escape(token) + r"\b", upper):
             raise ReadOnlyViolation(
-                f"Disallowed keyword '{token}' in a read-only query."
+                f"Disallowed keyword '{token}' — this server only reads data."
+            )
+    for prefix in _FORBIDDEN_PREFIXES:
+        if re.search(r"\b" + re.escape(prefix), upper):
+            raise ReadOnlyViolation(
+                f"Disallowed PL/SQL package reference '{prefix}*' in query."
             )
 
-    # Block row-locking selects (no data change, but acquires locks).
-    if re.search(r"\bFOR\s+UPDATE\b", upper):
+    if _FOR_UPDATE.search(upper):
         raise ReadOnlyViolation("'FOR UPDATE' is not allowed (acquires row locks).")

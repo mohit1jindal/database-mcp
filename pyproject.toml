@@ -1,6 +1,6 @@
 [project]
 name = "database-mcp"
-version = "0.2.0"
+version = "0.3.0"
 description = "Local stdio MCP server exposing a read-only SQL database (Oracle, PostgreSQL, MySQL, SQL Server, SQLite) as native Claude tools"
 readme = "README.md"
 requires-python = ">=3.10"

@@ -8,7 +8,8 @@ Tools (Pattern A — one per action, small surface):
   - run_query       : execute a read-only SELECT (the workhorse)
   - list_schemas    : list accessible schemas
   - list_tables     : list tables/views (optionally by schema / name)
-  - describe_table  : columns, types, nullability, and primary key
+  - describe_table  : columns, PK, foreign keys, indexes, comments
+  - get_table_sample: preview a few rows from a table/view
 
 Every tool is annotated read-only. run_query is additionally gated by
 safety.ensure_read_only before any SQL reaches the database.
@@ -29,9 +30,10 @@ mcp = FastMCP(
     instructions=(
         "Read-only access to a SQL database (Oracle, PostgreSQL, MySQL/MariaDB, "
         "SQL Server, or SQLite — selected via the DB_TYPE environment variable). "
-        "Use list_schemas / list_tables / describe_table to explore structure, "
-        "then run_query for SELECT statements. Only SELECT/WITH queries are "
-        "permitted — the server rejects any write or DDL. Results are row-capped; "
+        "Use list_schemas / list_tables / describe_table / get_table_sample to "
+        "explore structure and data, then run_query for SELECT or EXPLAIN "
+        "statements. Only SELECT/WITH/EXPLAIN queries are permitted — the server "
+        "rejects any write or DDL. Results are row-capped; "
         "narrow queries with WHERE/bind variables rather than selecting whole "
         "tables. The data may be sensitive — keep it local and do not exfiltrate "
         "it to external services."
@@ -53,7 +55,7 @@ def test_connection() -> dict:
 
 @mcp.tool(annotations={**_RO, "title": "Run read-only SQL query"})
 def run_query(
-    sql: Annotated[str, Field(description="A single read-only SELECT or WITH...SELECT statement. No DML/DDL/stored-procedure calls.")],
+    sql: Annotated[str, Field(description="A single read-only statement: SELECT, WITH...SELECT, or EXPLAIN. No DML/DDL/stored-procedure calls.")],
     binds: Annotated[
         dict | None,
         Field(description="Optional named bind variables, e.g. {\"id\": 42} for ':id' in the SQL. Prefer binds over string interpolation."),
@@ -65,8 +67,8 @@ def run_query(
 ) -> dict:
     """Execute a read-only SQL query and return columns + rows.
 
-    Only a single SELECT / WITH statement is allowed; anything that could
-    modify data, run procedural code, or lock rows is rejected. Output is
+    Only a single SELECT / WITH / EXPLAIN statement is allowed; anything that
+    could modify data, run procedural code, or lock rows is rejected. Output is
     capped at the server's configured row ceiling and reports `truncated: true`
     if more rows exist.
     """
@@ -106,8 +108,29 @@ def describe_table(
         Field(description="Schema of the table. Omit for the connection's default schema."),
     ] = None,
 ) -> dict:
-    """Return column definitions and primary-key columns for a table or view."""
+    """Return full structure of a table or view: columns (name, type, nullability,
+    default, comment), primary key, foreign keys, indexes, and table comment."""
     return db.describe_table(table_name, schema=schema)
+
+
+@mcp.tool(annotations={**_RO, "title": "Sample table rows"})
+def get_table_sample(
+    table_name: Annotated[str, Field(description="Table or view name to sample.")],
+    schema: Annotated[
+        str | None,
+        Field(description="Schema of the table. Omit for the connection's default schema."),
+    ] = None,
+    limit: Annotated[
+        int,
+        Field(description="Number of rows to return (capped by the server's DB_MAX_ROWS).", ge=1),
+    ] = 10,
+) -> dict:
+    """Return a small sample of rows from a table or view.
+
+    The fastest way to understand what a table actually contains. Identifiers
+    are safely quoted; the query is read-only and row-capped.
+    """
+    return db.get_table_sample(table_name, schema=schema, limit=limit)
 
 
 def main() -> None:

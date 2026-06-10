@@ -16,6 +16,12 @@ ALLOWED = [
     "WITH t AS (SELECT 1 x FROM dual) SELECT x FROM t",
     "SELECT name FROM users -- a comment\n WHERE name = 'bob; drop'",
     "SELECT 1 FROM dual;",
+    # Common column names / functions that must NOT trip the validator:
+    "SELECT comment FROM tickets",
+    "SELECT REPLACE(name, 'a', 'b') AS n FROM users",
+    "SELECT lock_id, set_count FROM jobs",
+    # EXPLAIN is permitted (read-only plan inspection):
+    "EXPLAIN SELECT * FROM orders",
 ]
 
 BLOCKED = [
@@ -54,7 +60,7 @@ try:
 except Exception as e:  # pragma: no cover
     failures.append(f"could not enumerate tools: {e}")
 
-expected = {"test_connection", "run_query", "list_schemas", "list_tables", "describe_table"}
+expected = {"test_connection", "run_query", "list_schemas", "list_tables", "describe_table", "get_table_sample"}
 missing = expected - tool_names
 if missing:
     failures.append(f"missing tools: {missing}")

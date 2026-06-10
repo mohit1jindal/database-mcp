@@ -1,5 +1,9 @@
 # database-mcp
 
+[![CI](https://github.com/mohit1jindal/database-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/mohit1jindal/database-mcp/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)
+
 A **local** MCP server that exposes a read-only SQL database to Claude Code as
 native tools. One server, multiple engines — pick your database with a single
 `DB_TYPE` setting:
@@ -31,22 +35,28 @@ point at databases holding sensitive data.
 | Tool | What it does |
 |------|--------------|
 | `test_connection` | Verify connectivity, report dialect + server version |
-| `run_query` | Execute a single read-only `SELECT` / `WITH` query (supports bind variables) |
+| `run_query` | Execute a single read-only `SELECT` / `WITH` / `EXPLAIN` query (supports bind variables) |
 | `list_schemas` | List schemas visible to the account |
 | `list_tables` | List tables/views, filterable by schema and name substring |
-| `describe_table` | Columns, types, nullability, and primary key for a table |
+| `describe_table` | Columns, types, nullability, comments, **primary key, foreign keys, and indexes** |
+| `get_table_sample` | Preview a few rows from a table/view (safely quoted, row-capped) |
 
 Schema discovery uses SQLAlchemy's cross-dialect inspector, so the same tools
 work identically across every supported database.
 
 ### Read-only guarantees
 
-1. `run_query` accepts only a single `SELECT` / `WITH...SELECT` statement.
-2. Comments and string literals are stripped before validation, so forbidden
-   keywords can't be smuggled in. DML, DDL, stored-procedure calls, `FOR UPDATE`,
-   and multi-statement input are all rejected.
-3. Every query runs in a transaction that is always rolled back.
+1. `run_query` accepts only a single statement that starts with `SELECT`, `WITH`,
+   or `EXPLAIN`.
+2. Comments and string literals are stripped before validation. Writes, DDL,
+   stored-procedure calls, data-modifying CTEs, `SELECT ... INTO`, `FOR UPDATE`,
+   and multi-statement input are all rejected — while common column names like
+   `comment` or functions like `REPLACE()` are correctly allowed.
+3. Every query runs in a transaction that is always rolled back; where the
+   dialect supports it, the session is also set read-only with a statement
+   timeout (`DB_QUERY_TIMEOUT`, default 30s).
 4. Row output is capped by `DB_MAX_ROWS` (default 100).
+5. Database errors are returned as concise messages, not raw stack traces.
 
 > **Defense in depth:** still connect with a database account that only has
 > read (`SELECT`) privileges. The tool-layer checks are a safety net, not a

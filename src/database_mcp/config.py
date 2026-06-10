@@ -42,6 +42,7 @@ class Config:
     db_type: str
     url: str               # SQLAlchemy URL string (password may be embedded)
     max_rows: int
+    query_timeout_s: int
     pool_min: int
     pool_max: int
 
@@ -122,6 +123,7 @@ def load_config() -> Config:
         db_type=db_type,
         url=url_str,
         max_rows=_int_env("DB_MAX_ROWS", 100),
+        query_timeout_s=_int_env("DB_QUERY_TIMEOUT", 30),
         pool_min=_int_env("DB_POOL_MIN", 1),
         pool_max=_int_env("DB_POOL_MAX", 5),
     )

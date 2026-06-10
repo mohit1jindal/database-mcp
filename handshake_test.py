@@ -21,7 +21,7 @@ async def main() -> int:
         names = sorted(t.name for t in tools)
         print("HANDSHAKE OK — server responded over stdio")
         print("tools:", names)
-        expected = {"test_connection", "run_query", "list_schemas", "list_tables", "describe_table"}
+        expected = {"test_connection", "run_query", "list_schemas", "list_tables", "describe_table", "get_table_sample"}
         missing = expected - set(names)
         if missing:
             print("MISSING:", missing)
