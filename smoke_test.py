@@ -4,11 +4,11 @@ Verifies imports, that the read-only validator accepts safe queries and
 rejects unsafe ones, and that the FastMCP tools are registered.
 """
 
-import oracledb  # noqa: F401
+import sqlalchemy  # noqa: F401
 import fastmcp  # noqa: F401
 
-from oracle_mcp.safety import ensure_read_only, ReadOnlyViolation
-from oracle_mcp import server
+from database_mcp.safety import ensure_read_only, ReadOnlyViolation
+from database_mcp import server
 
 ALLOWED = [
     "SELECT 1 FROM dual",

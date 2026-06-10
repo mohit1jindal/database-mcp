@@ -1,20 +1,27 @@
 [project]
-name = "oracle-mcp"
-version = "0.1.0"
-description = "Local stdio MCP server exposing a read-only Oracle database as native Claude tools"
+name = "database-mcp"
+version = "0.2.0"
+description = "Local stdio MCP server exposing a read-only SQL database (Oracle, PostgreSQL, MySQL, SQL Server, SQLite) as native Claude tools"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "fastmcp>=2.9",
-    "oracledb>=2.4",
+    "sqlalchemy>=2.0",
+    "oracledb>=2.4",        # Oracle driver (thin mode, no client install)
 ]
 
+[project.optional-dependencies]
+postgresql = ["psycopg2-binary>=2.9"]
+mysql = ["pymysql>=1.1"]
+mssql = ["pyodbc>=5.0"]     # also requires a system ODBC driver
+all = ["psycopg2-binary>=2.9", "pymysql>=1.1", "pyodbc>=5.0"]
+
 [project.scripts]
-oracle-mcp = "oracle_mcp.server:main"
+database-mcp = "database_mcp.server:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/oracle_mcp"]
+packages = ["src/database_mcp"]

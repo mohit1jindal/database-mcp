@@ -1,4 +1,4 @@
-"""Launch the server exactly as Claude Code will (python -m oracle_mcp.server
+"""Launch the server exactly as Claude Code will (python -m database_mcp.server
 over stdio) and complete a real MCP initialize + tools/list handshake.
 
 No database required: we only list tools, we don't call them.
@@ -14,7 +14,7 @@ from fastmcp.client.transports import StdioTransport
 async def main() -> int:
     transport = StdioTransport(
         command=sys.executable,
-        args=["-m", "oracle_mcp.server"],
+        args=["-m", "database_mcp.server"],
     )
     async with Client(transport) as client:
         tools = await client.list_tools()
